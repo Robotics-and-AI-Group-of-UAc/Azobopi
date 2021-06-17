@@ -2,7 +2,7 @@
 #define main_h
 #include <Arduino.h>
 #include "ezButton.h"
-#include "NeoPixel/Adafruit_NeoPixel.h"
+//#include "NeoPixel/Adafruit_NeoPixel.h"
 #include "ESP32MotorControl.h"
 #include "PID_simple.h"
 
@@ -22,9 +22,10 @@
 #define ENC2_B 39
 
 // Led NeoPixel - Comment first define if rgb led or three led version
-// #define NEOPIXEL 5
+#define NEOPIXEL 5
 #ifdef NEOPIXEL
-# include <NeoPixel/Adafruit_NeoPixel.h>
+#include "NeoPixel/Adafruit_NeoPixel.h"
+//# include <NeoPixel/Adafruit_NeoPixel.h>
 # define NUMPIXELS 1
 #else // ifdef NEOPIXEL
 

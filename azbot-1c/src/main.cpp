@@ -390,7 +390,7 @@ void setup()
   button_yellow_bottom.setDebounceTime(50);
 
   // Motor Pins
-  MotorControl.attachMotors(25, 26, 32, 33); // ROBOT José trocar 25 por 27
+  MotorControl.attachMotors(27, 26, 32, 33); // ROBOT José trocar 25 por 27
 
   // LEDs
   #ifdef NEOPIXEL
