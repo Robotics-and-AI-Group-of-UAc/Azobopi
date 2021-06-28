@@ -22,7 +22,7 @@
 #define ENC2_B 39
 
 // Led NeoPixel - Comment first define if rgb led or three led version
-#define NEOPIXEL 5
+//#define NEOPIXEL 5
 #ifdef NEOPIXEL
 #include "NeoPixel/Adafruit_NeoPixel.h"
 //# include <NeoPixel/Adafruit_NeoPixel.h>
@@ -41,7 +41,14 @@
 #define WHEELS_DISTANCE 110
 #define CURVE_CIRCUMFERENCE (3.14 * WHEELS_DISTANCE)
 
-// States
+//Colours
+#define RED 0
+#define GREEN 1
+#define BLUE 2
+#define YELLOW_DARK 3
+#define YELLOW_LIGHT 4
+
+//FSM::States
 #define VOID_ST 0
 #define INIT_ST 1
 #define START_EXEC_ST 2
@@ -52,14 +59,27 @@
 #define TURN_RIGHT_ST 7
 #define TURN_LEFT_ST 8
 #define BACK_ST 9
+#define SET_SPEED_ST 10
 
-// Movement Commands
+// ezButton pins
+ezButton button_yellow_left(18);
+ezButton button_red(19);
+ezButton button_yellow_bottom(21);
+ezButton button_blue(17);
+ezButton button_green(16);
+
+//FSM::Maximum number of Yellow Left Button States
+#define YL_NR_STATES 3
+
+//FSM::Commands
 #define MAX_NR_COMMANDS 20
 #define STOP 0
 #define TURN_LEFT 1
 #define TURN_RIGHT 3
 #define FORWARD 2
 #define BACKWARD 4
+
+// Encoder rotation ticks
 #define ROTATION_TICKS 1920
 
 // time motors are stopped
@@ -68,19 +88,19 @@
 // SetPoints for PID
 #define SETPOINT_RUN 3900
 #define SETPOINT_TURN 1540
-
+// Time
 unsigned long time_now;
 
-// initial motor speed
+// Initial motor speed
+#define MIN_SPEED_FACTOR 1.0
+#define MAX_SPEED_FACTOR 1.5
+float speedFactor = 1.0;
 int speedL = 40;
 int speedR = 40;
+//Motors stopped after achieving setpoint
+int motor_left;
+int motor_right;
 
-// ezButton pins
-ezButton button_yellow_left(18);
-ezButton button_red(19);
-ezButton button_yellow_bottom(21);
-ezButton button_blue(17);
-ezButton button_green(16);
 
 // commands
 int nr_comm;
@@ -102,7 +122,7 @@ double val_outputL;
 double val_outputR;
 double enc_readL;
 double enc_readR;
-double Setpoint;
+double setpoint;
 double kp = 0.0007, ki = 0.000008, kd = 8;
 int    kspeed = 2;
 volatile int counterPID;

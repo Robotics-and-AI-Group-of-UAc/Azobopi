@@ -14,8 +14,8 @@ portMUX_TYPE timerMux   = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE counterMux = portMUX_INITIALIZER_UNLOCKED;
 
 // Initialize PID control for each motor
-PID pidleft(&Setpoint, &enc_readL, &val_outputL, kp, ki, kd);
-PID pidright(&Setpoint, &enc_readR, &val_outputR, kp, ki, kd);
+PID pidleft(0, &enc_readL, &val_outputL, kp, ki, kd);
+PID pidright(1, &enc_readR, &val_outputR, kp, ki, kd);
 
 void Encoders_Interrupt(void)
 {
@@ -66,7 +66,6 @@ void stopTimer()
     encoder2_pos = 0;
   }
 }
-
 void setLed(int r, int g, int b)
 {
     #ifdef NEOPIXEL
@@ -85,12 +84,31 @@ void setLed(int r, int g, int b)
     #endif // ifdef NEOPIXEL
 }
 
+void setColour(int colour){
+  if ( colour == RED) {
+    setLed(255,0,0);
+  }
+  else if (colour == GREEN) {
+    setLed(0,255,0);
+  }
+  else if (colour == BLUE) {
+    setLed(0,0,255);
+  }
+  else if (colour == YELLOW_DARK) {
+    setLed(255,255,0);
+  }
+  else if (colour == YELLOW_LIGHT) {
+    setLed(255,255,100);
+  }
+}
+
+
 void read_cmd_buttons()
 {
   button_red.loop();
 
   if (button_red.isPressed()) {
-    mov                      = TURN_LEFT;
+    mov = TURN_LEFT;
     recorded_button[nr_comm] = mov;
     nr_comm++;
   }
@@ -136,26 +154,34 @@ void init(void)
 {
   setLed(0, 0, 255); // set blue
 
-  if (y_count > 3) {
+  if (y_count >= YL_NR_STATES) {
     button_yellow_left.resetCount();
-  } // reset
+  } // reset (return to initial state if yellow left pressed nr. of times equal to nr. states)
 
   if (y_count == 1) {
     // Initialize state
     nr_comm = 0;                                         // start the command reading
     memset(recorded_button, 0, sizeof(recorded_button)); // initialize to zero the commands vector
     machine_state = READ_COMM_ST;
+  } //First state = reading commands 
+  if (y_count == 2){
+    // Set speed
+    //DEBUG_PRINTLN("set_speed_st");
+    machine_state = SET_SPEED_ST;
+    setLed(255,255,200); //set violete
+
+    
   }
 
   if (y_count == 0) {
     on_execute_test_st = 0;
     on_execute_comm_st = 0;
-  }
+  } //reinitialize variables
 }
 
 void readComm(void)
 {
-  setLed(255, 0, 0);               // red
+  setLed(255, 0, 0);               //set red
 
   if (nr_comm < MAX_NR_COMMANDS) { // it only keeps the first max_nr_commands...
     read_cmd_buttons();
@@ -165,11 +191,42 @@ void readComm(void)
   if (y_count == 2 and nr_comm != 0) {
     machine_state = START_EXEC_ST;
   }
+  // -- a command to return to initial state (by pressing y_ again) 
+  if (y_count >= 2 and nr_comm == 0) {
+    machine_state = INIT_ST;
+  } 
 }
+
+void setSpeed(void){
+  if ( speedFactor == MIN_SPEED_FACTOR){
+    setColour(YELLOW_LIGHT);
+  }
+  else {
+    setColour(YELLOW_DARK);
+  }
+  
+  button_blue.loop();
+  
+  if (y_count == 3 ) {
+    machine_state = START_EXEC_ST;
+  }
+
+  if (button_blue.isPressed()) {
+    if (speedFactor == MIN_SPEED_FACTOR){
+      speedFactor = MAX_SPEED_FACTOR;
+      setColour(YELLOW_DARK);
+    }
+    else{
+      speedFactor = MIN_SPEED_FACTOR;
+      setColour(YELLOW_LIGHT);
+    }
+  }
+}
+
 
 void startExec(void)
 {
-  setLed(0, 255, 0); // green
+  setLed(0, 255, 0); // set green
   button_blue.loop();
 
   if (y_count > 2) {
@@ -186,6 +243,7 @@ void startExec(void)
   }
 }
 
+
 void exec(void)
 {
   comm_index--;
@@ -194,12 +252,26 @@ void exec(void)
     int action = recorded_button[(nr_comm - 1) - comm_index];
 
     if (action == FORWARD) {
+      pidright.Initialize(SETPOINT_RUN);
+      pidleft.Initialize(SETPOINT_RUN);
+      startTimer();
       machine_state = FORWARD_ST;
     } else if (action == BACKWARD) {
+      pidright.Initialize(SETPOINT_RUN);
+      pidleft.Initialize(SETPOINT_RUN);
+      startTimer();
       machine_state = BACK_ST;
     } else if (action == TURN_LEFT) {
+      pidleft.Initialize(SETPOINT_TURN);
+      pidright.Initialize(SETPOINT_TURN);
+      motor_left = 1;
+      motor_right = 1;
+      startTimer();
       machine_state = TURN_LEFT_ST;
     } else if (action == TURN_RIGHT) {
+      pidleft.Initialize(SETPOINT_TURN);
+      pidright.Initialize(SETPOINT_TURN);
+      startTimer();
       machine_state = TURN_RIGHT_ST;
     }
   }
@@ -215,11 +287,12 @@ void exec(void)
 
 void stopAll(void)
 {
+ 
   MotorControl.motorsStop();
-
   if (millis() >= time_now + STOP_DELAY) {
     machine_state = stop_next_state;
   }
+
 }
 
 void turnRight(void)
@@ -229,12 +302,12 @@ void turnRight(void)
    * float encTarget = nRevol * ROTATION_TICKS;*/
 
   if ((abs(encoder1_pos) < SETPOINT_TURN) &&
-      (abs(encoder2_pos < SETPOINT_TURN)))
+      (abs(encoder2_pos) < SETPOINT_TURN ))
   {
-    startTimer();
+    //startTimer();
 
-    int vel = kspeed * (speedL + val_outputL);
-    int ver = kspeed * (speedR + val_outputR);
+    int vel = kspeed * (speedL * speedFactor + val_outputL);
+    int ver = kspeed * (speedR * speedFactor + val_outputR);
     MotorControl.motorForward(0, vel);
     MotorControl.motorReverse(1, ver);
 
@@ -261,12 +334,13 @@ void turnLeft(void)
   /*float distance = a / (360 * CURVE_CIRCUMFERENCE);
    * float nRevol = distance / WHEEL_CIRCUMFERENCE;
    * float encTarget = nRevol * ROTATION_TICKS;*/
+  /*
   if ((abs(encoder1_pos) < SETPOINT_TURN) &&
-      (abs(encoder2_pos < SETPOINT_TURN)))
+      (abs(encoder2_pos) < SETPOINT_TURN))
   {
-    startTimer();
-    int vel = kspeed * (speedL + val_outputL);
-    int ver = kspeed * (speedR + val_outputR);
+    //startTimer();
+    int vel = kspeed * (speedL * speedFactor + val_outputL);
+    int ver = kspeed * (speedR * speedFactor + val_outputR);
     MotorControl.motorReverse(0, vel);
     MotorControl.motorForward(1, ver);
 
@@ -286,16 +360,61 @@ void turnLeft(void)
     stop_next_state = EXEC_ST;
     machine_state   = STOP_ST;
   }
+  */
+
+  
+ 
+  // --motor left
+  if ( abs(encoder1_pos) < SETPOINT_TURN){
+    int vel = kspeed * (speedL * speedFactor + val_outputL);
+    MotorControl.motorReverse(0, vel);
+  
+  }
+  else {
+    MotorControl.motorStop(0);
+    motor_left = 0;
+  }  
+  // --motor right
+  if (abs(encoder2_pos) < SETPOINT_TURN)
+  {
+    int ver = kspeed * (speedR * speedFactor + val_outputR);
+    MotorControl.motorForward(1, ver);
+  } 
+  else {
+    MotorControl.motorStop(1);
+    motor_right = 0;
+  }
+
+
+  // --both motors
+  if (motor_left == 0 && motor_right == 0){
+    stopTimer();
+    time_now = millis();
+
+    stop_next_state = EXEC_ST;
+    machine_state   = STOP_ST;
+  }
+  else{
+     if (counterPID > 50) {
+      portENTER_CRITICAL_ISR(&counterMux);
+      counterPID = 0;
+      portEXIT_CRITICAL_ISR(&counterMux);
+      enc_readL = encoder1_pos;
+      enc_readR = encoder2_pos;
+      pidleft.Compute();
+      pidright.Compute();
+    }  
+  }
 }
 
 void forward(void)
 {
   if ((abs(encoder1_pos) < SETPOINT_RUN) &&
       (abs(encoder2_pos) < SETPOINT_RUN)) {
-    startTimer();
+    //startTimer();
 
-    int vel = kspeed * (speedL + val_outputL);
-    int ver = kspeed * (speedR + val_outputR);
+    int vel = kspeed * (speedL * speedFactor + val_outputL);
+    int ver = kspeed * (speedR * speedFactor + val_outputR);
     MotorControl.motorForward(0, vel);
     MotorControl.motorForward(1, ver);
 
@@ -307,18 +426,21 @@ void forward(void)
       enc_readR = encoder2_pos;
       pidleft.Compute();
       pidright.Compute();
-
-      /*DEBUG_PRINT(enc_readL);
-       * DEBUG_PRINT(",");
-       * DEBUG_PRINT(val_outputL);
-       * DEBUG_PRINT(",");
-       * DEBUG_PRINT(vel);
-       * DEBUG_PRINT(",");
-       * DEBUG_PRINT(enc_readR);
-       * DEBUG_PRINT(",");
-       * DEBUG_PRINT(val_outputR);
-       * DEBUG_PRINT(",");
-       * DEBUG_PRINTLN(ver);*/
+      //DEBUG_PRINT(speedL);
+      //DEBUG_PRINT(",")
+      //DEBUG_PRINT(enc_readL);
+      //DEBUG_PRINT(",");
+      //DEBUG_PRINT(val_outputL);
+      //DEBUG_PRINT(",");
+      //DEBUG_PRINT(vel);
+      //DEBUG_PRINT(",");
+      //DEBUG_PRINT(speedR);
+      //DEBUG_PRINT(",")
+      //DEBUG_PRINT(enc_readR);
+      //DEBUG_PRINT(",");
+      //DEBUG_PRINT(val_outputR);
+      //DEBUG_PRINT(",");
+      //DEBUG_PRINTLN(ver);
     }
   } else {
     stopTimer();
@@ -353,6 +475,12 @@ void fsm(void)
 
   case FORWARD_ST:
     forward();
+/*
+    DEBUG_PRINT("Left>");
+    DEBUG_PRINTLN(pidleft.GetError());
+    DEBUG_PRINT("Right>");
+    DEBUG_PRINTLN(pidright.GetError());
+*/
     break;
 
   case TURN_RIGHT_ST:
@@ -366,11 +494,16 @@ void fsm(void)
   case STOP_ST:
     stopAll();
     break;
+ 
+ case SET_SPEED_ST:
+    setSpeed();
+    break;
 
   case VOID_ST:
     stopAll();
     break;
   }
+    
 } // fsm
 
 void setup()
@@ -390,13 +523,17 @@ void setup()
   button_yellow_bottom.setDebounceTime(50);
 
   // Motor Pins
+  #ifdef NEOPIXEL
   MotorControl.attachMotors(27, 26, 32, 33); // ROBOT José trocar 25 por 27
-
+  #else //THe other robot
+  MotorControl.attachMotors(25, 26, 32, 33); 
+  #endif
+   
   // LEDs
   #ifdef NEOPIXEL
   pixels.begin(); // INITIALIZE NeoPixel strip object
   pixels.clear(); // Set all pixel colors to 'off'
-  #else // ifdef NEOPIXEL
+  #else // ifndef NEOPIXEL
   pinMode(RED,   OUTPUT);
   pinMode(GREEN, OUTPUT);
   pinMode(BLUE,  OUTPUT);

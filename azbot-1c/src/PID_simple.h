@@ -4,23 +4,27 @@
 class PID {
 public:
 
-  PID(double *,
+  PID(int,
       double *,
       double *,
       double,
       double,
       double);
-
+  bool Initialize( 
+    double);
   bool   Compute();
   double GetP();
   double GetI();
   double GetD();
+  double GetError();
 
 private:
 
-  double *_setpoint;
   double *_encread;
   double *_output;
+  
+  int _id;
+  double _setpoint;
 
   double _kp;
   double _ki;
@@ -29,6 +33,11 @@ private:
   double dispP;
   double dispI;
   double dispD;
+  double error;
+  double proportional;
+  double integral;
+  double derivative;
+
 
   double last_proportional;
 };
